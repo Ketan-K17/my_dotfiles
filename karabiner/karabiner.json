@@ -1,25 +1,70 @@
 {
-  "global": {
-    "show_in_menu_bar": false
-  }, "profiles": [
-    {
-      "name": "Default profile", "selected": true, "complex_modifications": {
-        "rules": [
-          {
-            "description": "Caps Lock: Esc on tap, Ctrl on hold", "manipulators": [
-              {
-                "type": "basic", "from": {
-                  "key_code": "caps_lock", "modifiers": { "optional": ["any"] }
-                }, "to": [
-                  { "key_code": "left_control", "lazy": true }
-                ], "to_if_alone": [
-                  { "key_code": "escape" }
+    "global": { "show_in_menu_bar": false },
+    "profiles": [
+        {
+            "complex_modifications": {
+                "rules": [
+                    {
+                        "description": "Caps Lock: Esc on tap, Ctrl on hold",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "caps_lock",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "left_control",
+                                        "lazy": true
+                                    }
+                                ],
+                                "to_if_alone": [{ "key_code": "escape" }],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "F3/F4: Keyboard brightness down/up",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "f3",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [{ "apple_vendor_top_case_key_code": "illumination_down" }],
+                                "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "key_code": "f4",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [{ "apple_vendor_top_case_key_code": "illumination_up" }],
+                                "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "apple_vendor_keyboard_key_code": "mission_control",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [{ "apple_vendor_top_case_key_code": "illumination_down" }],
+                                "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "apple_vendor_keyboard_key_code": "spotlight",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [{ "apple_vendor_top_case_key_code": "illumination_up" }],
+                                "type": "basic"
+                            }
+                        ]
+                    }
                 ]
-              }
-            ]
-          }
-        ]
-      }
-    }
-  ]
+            },
+            "name": "Default profile",
+            "selected": true,
+            "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
+        }
+    ]
 }
