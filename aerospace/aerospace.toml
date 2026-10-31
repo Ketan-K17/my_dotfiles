@@ -1,0 +1,113 @@
+# AeroSpace config. Reload with Alt+Shift+; then Esc (service mode), or: aerospace reload-config
+
+config-version = 2
+start-at-login = true
+
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+accordion-padding = 30
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+# Keep these workspaces around even when empty
+persistent-workspaces = ['T', 'B', 'D', '1', '2', '3']
+
+[gaps]
+inner.horizontal = 8
+inner.vertical = 8
+outer.left = 8
+outer.right = 8
+outer.top = 8
+outer.bottom = 8
+
+# --- Apps pinned to workspaces ---
+[[on-window-detected]]
+if.app-id = 'com.mitchellh.ghostty'
+run = 'move-node-to-workspace T'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.Safari'
+run = 'move-node-to-workspace B'
+
+[[on-window-detected]]
+if.app-id = 'org.standardnotes.standardnotes'
+run = 'move-node-to-workspace D'
+
+# Workspace 1: test of several windows sharing one workspace
+[[on-window-detected]]
+if.app-id = 'com.apple.iCal'
+run = 'move-node-to-workspace 1'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.mail'
+run = 'move-node-to-workspace 1'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.finder'
+run = 'move-node-to-workspace 1'
+
+# --- Apps that should float instead of tile ---
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.raycast.macos'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.calculator'
+run = 'layout floating'
+
+[mode.main.binding]
+# Focus (vim keys)
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
+
+# Move the focused window
+alt-shift-h = 'move left'
+alt-shift-j = 'move down'
+alt-shift-k = 'move up'
+alt-shift-l = 'move right'
+
+# Resize
+alt-shift-minus = 'resize smart -50'
+alt-shift-equal = 'resize smart +50'
+
+# Layout
+alt-slash = 'layout tiles horizontal vertical'
+alt-comma = 'layout accordion horizontal vertical'
+alt-shift-f = 'fullscreen'
+alt-shift-space = 'layout floating tiling'
+
+# Go to workspace
+alt-t = 'workspace T'
+alt-b = 'workspace B'
+alt-d = 'workspace D'
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-tab = 'workspace-back-and-forth'
+
+# Send the focused window to a workspace
+alt-shift-t = 'move-node-to-workspace T'
+alt-shift-b = 'move-node-to-workspace B'
+alt-shift-d = 'move-node-to-workspace D'
+alt-shift-1 = 'move-node-to-workspace 1'
+alt-shift-2 = 'move-node-to-workspace 2'
+alt-shift-3 = 'move-node-to-workspace 3'
+
+# Move the current workspace to the other monitor
+alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+
+# Service mode for rarer commands
+alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+f = ['layout floating tiling', 'mode main']
+backspace = ['close-all-windows-but-current', 'mode main']
