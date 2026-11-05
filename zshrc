@@ -38,3 +38,5 @@ eval "$(starship init zsh)"
 # Plugins (syntax-highlighting must stay last)
 source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+eval "$(clii shell-init)"
