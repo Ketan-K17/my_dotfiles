@@ -2,8 +2,6 @@
 # 1. if you install something with 'brew install ..', run 'brew bundle dump --force' to sync this Brewfile with whatever exists on
 #    mac currently. It's like running pip freeze, this file is basically a requirements.txt file for your cli / gui applications.
 
-tap "nikitabobko/tap"
-
 # CLI tools
 brew "neovim"
 brew "tmux"
@@ -26,7 +24,6 @@ brew "zsh-syntax-highlighting"
 
 # Apps
 cask "ghostty"
-cask "nikitabobko/tap/aerospace"
 cask "karabiner-elements"
 cask "raycast"
 cask "claude-code"
