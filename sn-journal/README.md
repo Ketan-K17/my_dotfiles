@@ -15,6 +15,6 @@ Write a daily diary entry in Neovim; every `:w` lands in a Standard Notes tag.
     sn session --add          # stores the session in the macOS Keychain
     go build -o bin/sn-journal .
 
-Load it as a local plugin with lazy.nvim: `{ dir = "~/Developer/sn-journal", cmd = "Journal" }`.
+Load it as a local plugin with lazy.nvim: `{ dir = "~/dotfiles/sn-journal", cmd = { "Journal", "JournalProtect" } }`.
 
 `vim.g.sn_journal_tag` or `SN_JOURNAL_TAG` sets the tag (exact title, must already exist).
