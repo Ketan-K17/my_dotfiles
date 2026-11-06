@@ -6,6 +6,8 @@ Write a daily diary entry in Neovim; every `:w` lands in a Standard Notes tag.
 - Each save pushes the whole file in the background; Neovim's text wins.
 - Closing the buffer (or quitting) deletes the local copy once Standard Notes has it, and clears registers holding text yanked from it. If a push failed the copy is kept and the next `:Journal` reopens it.
 - No swap or undo files are written for the entry.
+- An entry protected in Standard Notes opens only after you type your account password (the one the app asks for). It is checked locally against the session's key; a wrong password never writes the entry to disk. A leftover copy of a protected entry asks too.
+- `:JournalProtect` protects the open entry, in Standard Notes as well. Saving from Neovim keeps a note's protection and any other fields sn-cli's library does not know about.
 
 ## Setup
 

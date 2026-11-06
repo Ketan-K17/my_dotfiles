@@ -2,6 +2,8 @@
 -- Every :w pushes it in the background, one push at a time. Closing the
 -- buffer (or quitting nvim) deletes the local file once Standard Notes has
 -- the latest text, and clears registers holding text yanked from it.
+-- An entry protected in Standard Notes (or with :JournalProtect) opens only
+-- after the account password checks out, the same one the app asks for.
 
 local M = {}
 
@@ -15,6 +17,27 @@ local current = nil -- the open entry's session, if any
 
 local function notify(msg, level)
   vim.schedule(function() vim.notify("journal: " .. msg, level or vim.log.levels.WARN) end)
+end
+
+local function write_meta(e)
+  local f = assert(io.open(meta, "w"))
+  f:write(e.title, "\n", e.created, "\n", e.tag, "\n", e.protected and "protected" or "open", "\n")
+  f:close()
+end
+
+-- Prompts for the account password until it checks out, then calls
+-- on_ok(password). Gives up after three tries or an empty answer.
+local function ask_password(on_ok)
+  for _ = 1, 3 do
+    local pw = vim.fn.inputsecret("Standard Notes password: ")
+    vim.cmd.redraw()
+    if pw == "" then break end
+    local r = vim.system({ helper, "unlock" }, { text = true, stdin = pw }):wait()
+    if r.code == 0 then return on_ok(pw) end
+    if r.code ~= 5 then return notify("unlock: " .. vim.trim(r.stderr or ""), vim.log.levels.ERROR) end
+    vim.api.nvim_echo({ { "journal: incorrect password", "ErrorMsg" } }, true, {})
+  end
+  notify("entry is protected; not opened", vim.log.levels.ERROR)
 end
 
 local function tag()
@@ -32,8 +55,13 @@ local function clear_registers(yanked)
 end
 
 -- Wires push-on-save and cleanup to the entry buffer.
+-- Returns the function :JournalProtect calls for this entry.
 local function attach(buf, e)
-  local cmd = { helper, "push", "--tag", e.tag, "--title", e.title, "--file", file, "--created", e.created }
+  local function cmd()
+    local c = { helper, "push", "--tag", e.tag, "--title", e.title, "--file", file, "--created", e.created }
+    if e.protected then table.insert(c, "--protect") end
+    return c
+  end
   local running, pending, closed = nil, false, false
   -- Standard Notes may lack what is on disk; a leftover starts out unsynced.
   local needs_push = e.leftover
@@ -53,7 +81,7 @@ local function attach(buf, e)
       return
     end
     pending, needs_push = false, false
-    running = vim.system(cmd, { text = true }, function(res)
+    running = vim.system(cmd(), { text = true }, function(res)
       if closed then return end
       finished(res)
       if pending then vim.schedule(push) end
@@ -67,7 +95,7 @@ local function attach(buf, e)
     if running then finished(running:wait()) end
     if needs_push or pending then
       pending, needs_push = false, false
-      finished(vim.system(cmd, { text = true }):wait())
+      finished(vim.system(cmd(), { text = true }):wait())
     end
     clear_registers(yanked)
     if needs_push then
@@ -98,6 +126,15 @@ local function attach(buf, e)
   if e.leftover then
     notify(("opened %q, which never reached Standard Notes. It is pushed on save or close."):format(e.title))
   end
+
+  return function()
+    if e.protected then return notify(("%q is already protected"):format(e.title), vim.log.levels.INFO) end
+    e.protected = true
+    write_meta(e)
+    needs_push = true
+    push()
+    notify(("protected %q; opening it now asks for your Standard Notes password"):format(e.title), vim.log.levels.INFO)
+  end
 end
 
 local function edit(e)
@@ -106,16 +143,46 @@ local function edit(e)
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].swapfile = false
   vim.bo[buf].undofile = false
+  -- Plain writing: no spell squiggles (LazyVim enables spell for text) and no completion popups.
+  vim.wo.spell = false
+  vim.b[buf].completion = false
   current = { buf = buf }
-  attach(buf, e)
+  current.protect = attach(buf, e)
 end
 
 local function read_meta()
   local f = io.open(meta, "r")
   if not f then return nil end
-  local title, created, t = f:read("l"), f:read("l"), f:read("l")
+  local title, created, t, prot = f:read("l"), f:read("l"), f:read("l"), f:read("l")
   f:close()
-  if title and created and t then return { title = title, created = created, tag = t, leftover = true } end
+  -- Metadata from before protection support says nothing either way; ask.
+  if title and created and t then
+    return { title = title, created = created, tag = t, leftover = true, protected = prot == "protected", locked = prot ~= "open" }
+  end
+end
+
+-- Pulls the entry into file and opens it. A protected entry comes back
+-- with exit code 4 and is retried with the password.
+local function pull(e, password)
+  local cmd = { helper, "pull", "--tag", e.tag, "--title", e.title, "--out", file }
+  if password then table.insert(cmd, "--password-stdin") end
+  vim.notify("journal: syncing…")
+  vim.system(cmd, { text = true, stdin = password }, function(r)
+    vim.schedule(function()
+      if r.code == 4 then
+        return ask_password(function(pw) pull(e, pw) end)
+      end
+      if r.code ~= 0 then
+        os.remove(file)
+        local why = r.code == 3 and ("more than one %q in %q; merge them in Standard Notes first"):format(e.title, e.tag)
+          or vim.trim(r.stderr or "")
+        return notify(why, vim.log.levels.ERROR)
+      end
+      e.protected = password ~= nil
+      write_meta(e)
+      edit(e)
+    end)
+  end)
 end
 
 function M.open()
@@ -128,6 +195,7 @@ function M.open()
   if vim.uv.fs_stat(file) then
     local e = read_meta()
     if not e then return notify(file .. " exists but its metadata is missing; move it away", vim.log.levels.ERROR) end
+    if e.locked then return ask_password(function() edit(e) end) end
     return edit(e)
   end
 
@@ -139,22 +207,14 @@ function M.open()
     tag = tag(),
     leftover = false,
   }
+  pull(e)
+end
 
-  vim.notify("journal: syncing…")
-  vim.system({ helper, "pull", "--tag", e.tag, "--title", e.title, "--out", file }, { text = true }, function(r)
-    vim.schedule(function()
-      if r.code ~= 0 then
-        os.remove(file)
-        local why = r.code == 3 and ("more than one %q in %q; merge them in Standard Notes first"):format(e.title, e.tag)
-          or vim.trim(r.stderr or "")
-        return notify(why, vim.log.levels.ERROR)
-      end
-      local f = assert(io.open(meta, "w"))
-      f:write(e.title, "\n", e.created, "\n", e.tag, "\n")
-      f:close()
-      edit(e)
-    end)
-  end)
+function M.protect()
+  if not (current and vim.api.nvim_buf_is_valid(current.buf)) then
+    return notify("open today's entry with :Journal first", vim.log.levels.ERROR)
+  end
+  current.protect()
 end
 
 return M

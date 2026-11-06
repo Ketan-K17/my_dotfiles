@@ -22,9 +22,13 @@ var (
 )
 
 // Store loads a freshly synced view of the account and persists changes.
+// gosn-v2 does not model a note's "protected" flag, so the store tracks it:
+// Protected reports it for a loaded note, and Save keeps it on notes it
+// rewrites, setting it on all of them when protect is true.
 type Store interface {
 	Load() (items.Tags, items.Notes, error)
-	Save(items.Notes, items.Tags) error
+	Protected(noteUUID string) (bool, error)
+	Save(notes items.Notes, tags items.Tags, protect bool) error
 }
 
 // Title returns the note title for the diary day containing t,
@@ -33,23 +37,29 @@ func Title(t time.Time) string {
 	return t.Add(-RolloverHour * time.Hour).Format("Monday, January 2, '06")
 }
 
-// Pull returns the text of the note titled noteTitle in tag tagTitle.
-// found is false when the tag has no such note.
-func Pull(s Store, tagTitle, noteTitle string) (text string, found bool, err error) {
+// Pull returns the text of the note titled noteTitle in tag tagTitle, and
+// whether Standard Notes has it protected. found is false when the tag has no
+// such note. Callers must not reveal the text of a protected note without
+// checking the account password.
+func Pull(s Store, tagTitle, noteTitle string) (text string, found, protected bool, err error) {
 	tags, notes, err := s.Load()
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	_, n, err := find(tags, notes, tagTitle, noteTitle)
 	if err != nil || n == nil {
-		return "", false, err
+		return "", false, false, err
 	}
-	return n.Content.Text, true, nil
+	if protected, err = s.Protected(n.UUID); err != nil {
+		return "", false, false, err
+	}
+	return n.Content.Text, true, protected, nil
 }
 
 // Push overwrites the note's text, creating it in the tag if it does not
 // exist. created is used only when creating; now becomes the modified time.
-func Push(s Store, tagTitle, noteTitle, text string, created, now time.Time) error {
+// protect marks the note protected; an already protected note stays so.
+func Push(s Store, tagTitle, noteTitle, text string, created, now time.Time, protect bool) error {
 	tags, notes, err := s.Load()
 	if err != nil {
 		return err
@@ -61,12 +71,18 @@ func Push(s Store, tagTitle, noteTitle, text string, created, now time.Time) err
 
 	if n != nil {
 		if n.Content.Text == text {
-			return nil
+			if !protect {
+				return nil
+			}
+			if already, err := s.Protected(n.UUID); err != nil || already {
+				return err
+			}
+		} else {
+			n.Content.Text = text
+			n.Content.PreviewPlain = preview(text)
+			n.Content.SetUpdateTime(now)
 		}
-		n.Content.Text = text
-		n.Content.PreviewPlain = preview(text)
-		n.Content.SetUpdateTime(now)
-		return s.Save(items.Notes{*n}, nil)
+		return s.Save(items.Notes{*n}, nil, protect)
 	}
 
 	if strings.TrimSpace(text) == "" {
@@ -85,7 +101,7 @@ func Push(s Store, tagTitle, noteTitle, text string, created, now time.Time) err
 		nn.CreatedAtTimestamp = created.UnixMicro()
 	}
 	tg.Content.UpsertReferences(items.ItemReferences{{UUID: nn.UUID, ContentType: common.SNItemTypeNote}})
-	return s.Save(items.Notes{nn}, items.Tags{*tg})
+	return s.Save(items.Notes{nn}, items.Tags{*tg}, protect)
 }
 
 // find locates the tag by exact title and, among its references, the

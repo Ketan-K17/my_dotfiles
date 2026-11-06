@@ -37,16 +37,19 @@ func TestTitle(t *testing.T) {
 type fakeStore struct {
 	tags      items.Tags
 	notes     items.Notes
+	protected map[string]bool
 	savedN    items.Notes
 	savedT    items.Tags
+	savedProt bool
 	saveCalls int
 	loadErr   error
 }
 
 func (f *fakeStore) Load() (items.Tags, items.Notes, error) { return f.tags, f.notes, f.loadErr }
-func (f *fakeStore) Save(n items.Notes, t items.Tags) error {
+func (f *fakeStore) Protected(uuid string) (bool, error)    { return f.protected[uuid], nil }
+func (f *fakeStore) Save(n items.Notes, t items.Tags, protect bool) error {
 	f.saveCalls++
-	f.savedN, f.savedT = n, t
+	f.savedN, f.savedT, f.savedProt = n, t, protect
 	return nil
 }
 
@@ -73,15 +76,15 @@ func TestPullFindsExactTitleInTag(t *testing.T) {
 		tags:  items.Tags{tag("musings / nsfw", want, other), tag("other", outside)},
 		notes: items.Notes{other, outside, want},
 	}
-	text, found, err := Pull(s, "musings / nsfw", day)
-	if err != nil || !found || text != "dear diary" {
-		t.Fatalf("got %q %v %v", text, found, err)
+	text, found, prot, err := Pull(s, "musings / nsfw", day)
+	if err != nil || !found || prot || text != "dear diary" {
+		t.Fatalf("got %q %v %v %v", text, found, prot, err)
 	}
 }
 
 func TestPullMissingNote(t *testing.T) {
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw")}}
-	text, found, err := Pull(s, "musings / nsfw", day)
+	text, found, _, err := Pull(s, "musings / nsfw", day)
 	if err != nil || found || text != "" {
 		t.Fatalf("got %q %v %v", text, found, err)
 	}
@@ -89,14 +92,14 @@ func TestPullMissingNote(t *testing.T) {
 
 func TestPullMissingTagIsError(t *testing.T) {
 	s := &fakeStore{tags: items.Tags{tag("Musings / nsfw")}} // case differs
-	if _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrTagNotFound) {
+	if _, _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrTagNotFound) {
 		t.Fatalf("want ErrTagNotFound, got %v", err)
 	}
 }
 
 func TestPullDuplicateTagIsError(t *testing.T) {
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw"), tag("musings / nsfw")}}
-	if _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrAmbiguous) {
+	if _, _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrAmbiguous) {
 		t.Fatalf("want ErrAmbiguous, got %v", err)
 	}
 }
@@ -104,7 +107,7 @@ func TestPullDuplicateTagIsError(t *testing.T) {
 func TestPullDuplicateNoteIsError(t *testing.T) {
 	a, b := note(day, "a"), note(day, "b")
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", a, b)}, notes: items.Notes{a, b}}
-	if _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrAmbiguous) {
+	if _, _, _, err := Pull(s, "musings / nsfw", day); !errors.Is(err, ErrAmbiguous) {
 		t.Fatalf("want ErrAmbiguous, got %v", err)
 	}
 }
@@ -115,7 +118,7 @@ func TestPullIgnoresTrashed(t *testing.T) {
 	trashed.Content.Trashed = &tr
 	live := note(day, "live")
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", trashed, live)}, notes: items.Notes{trashed, live}}
-	text, found, err := Pull(s, "musings / nsfw", day)
+	text, found, _, err := Pull(s, "musings / nsfw", day)
 	if err != nil || !found || text != "live" {
 		t.Fatalf("got %q %v %v", text, found, err)
 	}
@@ -126,7 +129,7 @@ func TestPushUpdatesExisting(t *testing.T) {
 	tg := tag("musings / nsfw", n)
 	s := &fakeStore{tags: items.Tags{tg}, notes: items.Notes{n}}
 	now := at("2026-11-01 22:15").UTC()
-	if err := Push(s, "musings / nsfw", day, "new text", time.Time{}, now); err != nil {
+	if err := Push(s, "musings / nsfw", day, "new text", time.Time{}, now, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.savedN) != 1 || s.savedN[0].UUID != n.UUID || s.savedN[0].Content.Text != "new text" {
@@ -143,7 +146,7 @@ func TestPushUpdatesExisting(t *testing.T) {
 func TestPushUnchangedTextSkipsSave(t *testing.T) {
 	n := note(day, "same")
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", n)}, notes: items.Notes{n}}
-	if err := Push(s, "musings / nsfw", day, "same", time.Time{}, time.Now()); err != nil {
+	if err := Push(s, "musings / nsfw", day, "same", time.Time{}, time.Now(), false); err != nil {
 		t.Fatal(err)
 	}
 	if s.saveCalls != 0 {
@@ -156,7 +159,7 @@ func TestPushCreatesPlainTextNoteInTag(t *testing.T) {
 	s := &fakeStore{tags: items.Tags{tg}}
 	created := at("2026-11-01 21:00").UTC()
 	now := at("2026-11-01 21:05").UTC()
-	if err := Push(s, "musings / nsfw", day, "first words", created, now); err != nil {
+	if err := Push(s, "musings / nsfw", day, "first words", created, now, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.savedN) != 1 || len(s.savedT) != 1 {
@@ -180,7 +183,7 @@ func TestPushCreatesPlainTextNoteInTag(t *testing.T) {
 
 func TestPushCreateSkipsEmptyText(t *testing.T) {
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw")}}
-	if err := Push(s, "musings / nsfw", day, "  \n", time.Now(), time.Now()); err != nil {
+	if err := Push(s, "musings / nsfw", day, "  \n", time.Now(), time.Now(), false); err != nil {
 		t.Fatal(err)
 	}
 	if s.saveCalls != 0 {
@@ -191,10 +194,51 @@ func TestPushCreateSkipsEmptyText(t *testing.T) {
 func TestPushRefusesDuplicates(t *testing.T) {
 	a, b := note(day, "a"), note(day, "b")
 	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", a, b)}, notes: items.Notes{a, b}}
-	if err := Push(s, "musings / nsfw", day, "x", time.Now(), time.Now()); !errors.Is(err, ErrAmbiguous) {
+	if err := Push(s, "musings / nsfw", day, "x", time.Now(), time.Now(), false); !errors.Is(err, ErrAmbiguous) {
 		t.Fatalf("want ErrAmbiguous, got %v", err)
 	}
 	if s.saveCalls != 0 {
 		t.Fatal("must not save")
+	}
+}
+
+func TestPullReportsProtected(t *testing.T) {
+	n := note(day, "secret")
+	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", n)}, notes: items.Notes{n}, protected: map[string]bool{n.UUID: true}}
+	_, found, prot, err := Pull(s, "musings / nsfw", day)
+	if err != nil || !found || !prot {
+		t.Fatalf("got %v %v %v", found, prot, err)
+	}
+}
+
+func TestPushProtectsUnchangedNote(t *testing.T) {
+	n := note(day, "same")
+	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", n)}, notes: items.Notes{n}}
+	if err := Push(s, "musings / nsfw", day, "same", time.Time{}, time.Now(), true); err != nil {
+		t.Fatal(err)
+	}
+	if s.saveCalls != 1 || !s.savedProt || s.savedN[0].UUID != n.UUID {
+		t.Fatalf("saves %d protect %v", s.saveCalls, s.savedProt)
+	}
+}
+
+func TestPushProtectSkipsAlreadyProtected(t *testing.T) {
+	n := note(day, "same")
+	s := &fakeStore{tags: items.Tags{tag("musings / nsfw", n)}, notes: items.Notes{n}, protected: map[string]bool{n.UUID: true}}
+	if err := Push(s, "musings / nsfw", day, "same", time.Time{}, time.Now(), true); err != nil {
+		t.Fatal(err)
+	}
+	if s.saveCalls != 0 {
+		t.Fatal("expected no save")
+	}
+}
+
+func TestPushProtectsNewNote(t *testing.T) {
+	s := &fakeStore{tags: items.Tags{tag("musings / nsfw")}}
+	if err := Push(s, "musings / nsfw", day, "first", time.Now(), time.Now(), true); err != nil {
+		t.Fatal(err)
+	}
+	if !s.savedProt {
+		t.Fatal("new note should be saved protected")
 	}
 }
