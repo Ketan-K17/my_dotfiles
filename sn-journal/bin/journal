@@ -1,0 +1,3 @@
+#!/bin/zsh
+# Open today's diary entry; same as running :Journal inside nvim.
+exec nvim +Journal
