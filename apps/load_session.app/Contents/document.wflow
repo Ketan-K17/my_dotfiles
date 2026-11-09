@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>533</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<true/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>1.0.2</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>source</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run AppleScript.action</string>
+				<key>ActionName</key>
+				<string>Run AppleScript</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>source</key>
+					<string>on run {input, parameters}
+	-- Sessions are plain text: one URL per line, a blank line between windows, # for comments
+	set folderPath to (POSIX path of (path to home folder)) &amp; "Desktop/sessions/"
+
+	-- Session names, most recently saved first
+	set sessionFiles to do shell script "cd " &amp; quoted form of folderPath &amp; " 2&gt;/dev/null &amp;&amp; ls -t -- *.txt 2&gt;/dev/null | sed 's/\\.txt$//' || true"
+	if sessionFiles is "" then
+		display alert "No sessions saved yet" message "Use save_session to save some tabs first. Sessions live in " &amp; folderPath
+		return input
+	end if
+	set sessionList to paragraphs of sessionFiles
+
+	set chosenSessions to choose from list sessionList with title "Load Session" with prompt "Select sessions to restore (⌘-click for several):" default items {item 1 of sessionList} OK button name "Restore" cancel button name "Cancel" with multiple selections allowed
+	if chosenSessions is false then return input
+
+	-- If launching Safari creates a blank window, reuse it for the first window we open
+	set blankWindow to missing value
+	if application "Safari" is not running then
+		tell application "Safari" to activate
+		repeat 30 times
+			tell application "Safari" to if (count of windows) &gt; 0 then exit repeat
+			delay 0.1
+		end repeat
+		tell application "Safari"
+			if (count of windows) is 1 and (count of tabs of window 1) is 1 then
+				set u to URL of current tab of window 1
+				if u is missing value or u is "" or u is "about:blank" or u starts with "favorites:" then set blankWindow to window 1
+			end if
+		end tell
+	end if
+
+	set tabCount to 0
+	repeat with sessionName in chosenSessions
+		set filePath to folderPath &amp; sessionName &amp; ".txt"
+		try
+			set fileLines to paragraphs of (read (POSIX file filePath) as «class utf8»)
+		on error
+			display alert "Couldn't read session \"" &amp; sessionName &amp; "\"" as warning
+			set fileLines to {}
+		end try
+
+		-- Each blank-line-separated group becomes its own window
+		set urls to {}
+		repeat with fileLine in (fileLines &amp; {""})
+			set l to my trim(contents of fileLine)
+			if l is "" then
+				if urls is not {} then
+					set blankWindow to my openWindow(urls, blankWindow)
+					set tabCount to tabCount + (count of urls)
+					set urls to {}
+				end if
+			else if l does not start with "#" then
+				set end of urls to l
+			end if
+		end repeat
+	end repeat
+
+	tell application "Safari" to activate
+	return input
+end run
+
+-- Opens urls as tabs in a new Safari window (or in reuseWindow); always returns missing value
+on openWindow(urls, reuseWindow)
+	tell application "Safari"
+		if reuseWindow is missing value then
+			make new document with properties {URL:item 1 of urls}
+			set w to front window
+		else
+			set w to reuseWindow
+			set URL of current tab of w to item 1 of urls
+		end if
+		repeat with i from 2 to count of urls
+			tell w to make new tab at end of tabs with properties {URL:item i of urls}
+		end repeat
+	end tell
+	return missing value
+end openWindow
+
+on trim(t)
+	set ws to {space, tab, return, linefeed}
+	repeat while t is not "" and (character 1 of t) is in ws
+		if (count of t) is 1 then return ""
+		set t to text 2 thru -1 of t
+	end repeat
+	repeat while t is not "" and (character -1 of t) is in ws
+		if (count of t) is 1 then return ""
+		set t to text 1 thru -2 of t
+	end repeat
+	return t
+end trim
+</string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.Automator.RunScript</string>
+				<key>CFBundleVersion</key>
+				<string>1.0.2</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunScriptAction</string>
+				<key>InputUUID</key>
+				<string>7D84A726-60D3-4956-BEC2-D0A7F626B575</string>
+				<key>Keywords</key>
+				<array>
+					<string>Run</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>6EFD3E44-D7E6-416E-B5B1-7251ED95485A</string>
+				<key>UUID</key>
+				<string>BF24B6F1-E44E-4DAC-A258-7018117D6ED1</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict>
+					<key>0</key>
+					<dict>
+						<key>default value</key>
+						<string>on run {input, parameters}
+	
+	(* Your script goes here *)
+	
+	return input
+end run</string>
+						<key>name</key>
+						<string>source</string>
+						<key>required</key>
+						<string>0</string>
+						<key>type</key>
+						<string>0</string>
+						<key>uuid</key>
+						<string>0</string>
+					</dict>
+				</dict>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+				<key>location</key>
+				<string>449.000000:315.000000</string>
+				<key>nibPath</key>
+				<string>/System/Library/Automator/Run AppleScript.action/Contents/Resources/Base.lproj/main.nib</string>
+			</dict>
+			<key>isViewVisible</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.application</string>
+	</dict>
+</dict>
+</plist>

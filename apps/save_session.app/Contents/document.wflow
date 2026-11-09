@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>533</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<true/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>1.0.2</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>source</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.applescript.object</string>
+					</array>
+				</dict>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run AppleScript.action</string>
+				<key>ActionName</key>
+				<string>Run AppleScript</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>source</key>
+					<string>on run {input, parameters}
+	-- Sessions are plain text: one URL per line, a blank line between windows
+	set folderPath to (POSIX path of (path to home folder)) &amp; "Desktop/sessions/"
+	do shell script "mkdir -p " &amp; quoted form of folderPath
+
+	if application "Safari" is not running then
+		display alert "Safari isn't running" message "Open the tabs you want to save first." as warning
+		return input
+	end if
+
+	-- Collect tab URLs per window, front window first
+	set windowURLs to {}
+	tell application "Safari"
+		repeat with w in windows
+			try
+				set urls to {}
+				set tabURLs to URL of every tab of w
+				repeat with tabURL in tabURLs
+					set u to contents of tabURL
+					if u is not missing value and u is not "" and u is not "about:blank" and u does not start with "favorites:" then set end of urls to u
+				end repeat
+				if urls is not {} then set end of windowURLs to urls
+			end try
+		end repeat
+	end tell
+
+	if windowURLs is {} then
+		display alert "Nothing to save" message "Safari has no open tabs with web pages." as warning
+		return input
+	end if
+
+	-- Offer all windows when more than one is open
+	set chosenWindows to {item 1 of windowURLs}
+	if (count of windowURLs) &gt; 1 then
+		set totalTabs to 0
+		repeat with urls in windowURLs
+			set totalTabs to totalTabs + (count of urls)
+		end repeat
+		set frontLabel to "Front Window (" &amp; (count of item 1 of windowURLs) &amp; ")"
+		set allLabel to "All " &amp; (count of windowURLs) &amp; " Windows (" &amp; totalTabs &amp; ")"
+		set scopeChoice to button returned of (display dialog "Save which tabs?" buttons {"Cancel", allLabel, frontLabel} default button frontLabel cancel button "Cancel" with title "Save Session")
+		if scopeChoice is allLabel then set chosenWindows to windowURLs
+	end if
+
+	-- Ask for a name; replace characters that can't go in a filename
+	repeat
+		set fileName to text returned of (display dialog "Session name:" default answer "" buttons {"Cancel", "Save"} default button "Save" cancel button "Cancel" with title "Save Session")
+		set fileName to my replaceText(my replaceText(fileName, "/", "-"), ":", "-")
+		if fileName is not "" then exit repeat
+	end repeat
+	set filePath to folderPath &amp; fileName &amp; ".txt"
+
+	try
+		do shell script "test -e " &amp; quoted form of filePath
+		display dialog "A session named \"" &amp; fileName &amp; "\" already exists. Replace it?" buttons {"Cancel", "Replace"} default button "Replace" cancel button "Cancel" with title "Save Session" with icon caution
+	end try
+
+	-- Build the file text
+	set urlsText to ""
+	set tabCount to 0
+	repeat with i from 1 to count of chosenWindows
+		if i &gt; 1 then set urlsText to urlsText &amp; linefeed
+		repeat with u in item i of chosenWindows
+			set urlsText to urlsText &amp; u &amp; linefeed
+			set tabCount to tabCount + 1
+		end repeat
+	end repeat
+
+	set fh to open for access (POSIX file filePath) with write permission
+	try
+		set eof fh to 0
+		write urlsText to fh as «class utf8»
+		close access fh
+	on error errMsg
+		close access fh
+		display alert "Couldn't save session" message errMsg as critical
+		return input
+	end try
+
+	display notification "Saved " &amp; tabCount &amp; " tabs" with title "Session \"" &amp; fileName &amp; "\" saved"
+	return input
+end run
+
+on replaceText(theText, findText, replacement)
+	set AppleScript's text item delimiters to findText
+	set parts to text items of theText
+	set AppleScript's text item delimiters to replacement
+	set theText to parts as text
+	set AppleScript's text item delimiters to ""
+	return theText
+end replaceText
+</string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.Automator.RunScript</string>
+				<key>CFBundleVersion</key>
+				<string>1.0.2</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunScriptAction</string>
+				<key>InputUUID</key>
+				<string>6EDC2FFA-3FA9-4CDE-8FBF-15E3B5F20C11</string>
+				<key>Keywords</key>
+				<array>
+					<string>Run</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>71D91930-BDE3-44C6-BA05-8362577B5068</string>
+				<key>UUID</key>
+				<string>F0037051-4F31-4736-8882-F60D91013577</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict>
+					<key>0</key>
+					<dict>
+						<key>default value</key>
+						<string>on run {input, parameters}
+	
+	(* Your script goes here *)
+	
+	return input
+end run</string>
+						<key>name</key>
+						<string>source</string>
+						<key>required</key>
+						<string>0</string>
+						<key>type</key>
+						<string>0</string>
+						<key>uuid</key>
+						<string>0</string>
+					</dict>
+				</dict>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+				<key>location</key>
+				<string>449.000000:315.000000</string>
+				<key>nibPath</key>
+				<string>/System/Library/Automator/Run AppleScript.action/Contents/Resources/Base.lproj/main.nib</string>
+			</dict>
+			<key>isViewVisible</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.application</string>
+	</dict>
+</dict>
+</plist>

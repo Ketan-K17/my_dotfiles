@@ -11,6 +11,11 @@ setopt SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE
 # Completion
 autoload -Uz compinit && compinit
 
+# Personal scripts (save_session, load_session, ...)
+export PATH="$HOME/dotfiles/bin:$PATH"
+_load_session() { compadd -- ${SESSIONS_DIR:-$HOME/Desktop/sessions}/*.txt(N:t:r) }
+compdef _load_session load_session
+
 # Editor
 export EDITOR=nvim
 export VISUAL=nvim

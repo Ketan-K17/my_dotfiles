@@ -1,0 +1,55 @@
+#!/usr/bin/env zsh
+# Save Safari tabs as a named session (same format as ~/dotfiles/apps/save_session.app).
+#   save_session [name]      front window
+#   save_session -a [name]   all windows (restored as separate windows)
+set -euo pipefail
+
+dir=${SESSIONS_DIR:-$HOME/Desktop/sessions}
+scope=front
+[[ ${1:-} == -a ]] && { scope=all; shift }
+[[ ${1:-} == -h || ${1:-} == --help ]] && { sed -n '2,4s/^# \{0,1\}//p' $0; exit }
+
+urls=$(osascript - $scope <<'APPLESCRIPT'
+on run argv
+	if application "Safari" is not running then error "Safari isn't running"
+	set out to ""
+	tell application "Safari"
+		if item 1 of argv is "front" then
+			set ws to {window 1}
+		else
+			set ws to windows
+		end if
+		repeat with w in ws
+			try
+				set block to ""
+				set tabURLs to URL of every tab of w
+				repeat with tabURL in tabURLs
+					set u to contents of tabURL
+					if u is not missing value and u is not "" and u is not "about:blank" and u does not start with "favorites:" then set block to block & u & linefeed
+				end repeat
+				if block is not "" then
+					if out is not "" then set out to out & linefeed
+					set out to out & block
+				end if
+			end try
+		end repeat
+	end tell
+	return out
+end run
+APPLESCRIPT
+)
+[[ -n $urls ]] || { print -u2 "No tabs to save."; exit 1 }
+
+name=${1:-}
+[[ -n $name ]] || read -r "name?Session name: "
+name=${${name//\//-}//:/-}
+[[ -n $name ]] || { print -u2 "No name given."; exit 1 }
+
+mkdir -p $dir
+file=$dir/$name.txt
+if [[ -e $file ]]; then
+  read -q "?'$name' exists. Replace? [y/N] " || { print; exit 1 }
+  print
+fi
+print -r -- $urls > $file
+print "Saved $(grep -c . $file) tabs to '$name'"

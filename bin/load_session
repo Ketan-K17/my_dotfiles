@@ -1,0 +1,65 @@
+#!/usr/bin/env zsh
+# Open a saved session in Safari (same format as ~/dotfiles/apps/load_session.app).
+#   load_session               pick with fzf (Tab to pick several)
+#   load_session name...       open by name; a partial name opens fzf pre-filtered
+#   load_session -l            list sessions, newest first
+#   load_session -e name       edit in $EDITOR
+#   load_session -d name...    delete
+set -euo pipefail
+
+dir=${SESSIONS_DIR:-$HOME/Desktop/sessions}
+sessions() { [[ -d $dir ]] && command ls -t $dir | sed -n 's/\.txt$//p' }
+pick() { sessions | fzf --multi --select-1 --exit-0 --query "${1:-}" --preview "cat '$dir'/{}.txt" --prompt 'session> ' }
+
+case ${1:-} in
+  -h|--help) sed -n '2,7s/^# \{0,1\}//p' $0; exit ;;
+  -l) sessions; exit ;;
+  -e) exec ${EDITOR:-vi} $dir/${2:?name required}.txt ;;
+  -d) shift; for n in "$@"; do rm -v $dir/$n.txt; done; exit ;;
+esac
+
+names=()
+if (( $# == 0 )); then
+  names=(${(f)"$(pick)"})
+else
+  for n in "$@"; do
+    if [[ -e $dir/$n.txt ]]; then names+=$n
+    else names+=(${(f)"$(pick $n)"})
+    fi
+  done
+fi
+(( $#names )) || { print -u2 "No session chosen."; exit 1 }
+
+# One argv entry per URL, with "" marking the end of each window
+args=()
+for n in $names; do
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${${line##[[:space:]]#}%%[[:space:]]#}
+    [[ $line == \#* ]] && continue
+    args+=("$line")
+  done < $dir/$n.txt
+  args+=('')
+done
+
+osascript - "${args[@]}" <<'APPLESCRIPT'
+on run argv
+	tell application "Safari"
+		set urls to {}
+		repeat with arg in (argv & {""})
+			set u to contents of arg
+			if u is not "" then
+				set end of urls to u
+			else if urls is not {} then
+				make new document with properties {URL:item 1 of urls}
+				set w to front window
+				repeat with i from 2 to count of urls
+					tell w to make new tab at end of tabs with properties {URL:item i of urls}
+				end repeat
+				set urls to {}
+			end if
+		end repeat
+		activate
+	end tell
+end run
+APPLESCRIPT
+print "Opened ${(j:, :)names}"
