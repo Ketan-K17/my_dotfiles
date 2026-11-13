@@ -52,38 +52,48 @@
 				<dict>
 					<key>source</key>
 					<string>on run {input, parameters}
-	-- Sessions are plain text: one URL per line, a blank line between windows
+	-- Sessions are plain text: one URL per line, a blank line between windows, then file paths to reopen
 	set folderPath to (POSIX path of (path to home folder)) &amp; "Desktop/sessions/"
 	do shell script "mkdir -p " &amp; quoted form of folderPath
 
-	if application "Safari" is not running then
+	-- Files dropped on the app are saved with the tabs; more can be added from the name dialog
+	set filePaths to {}
+	try
+		repeat with f in input
+			set end of filePaths to POSIX path of f
+		end repeat
+	end try
+
+	if application "Safari" is not running and filePaths is {} then
 		display alert "Safari isn't running" message "Open the tabs you want to save first." as warning
 		return input
 	end if
 
 	-- Collect tab URLs per window, front window first
 	set windowURLs to {}
-	tell application "Safari"
-		repeat with w in windows
-			try
-				set urls to {}
-				set tabURLs to URL of every tab of w
-				repeat with tabURL in tabURLs
-					set u to contents of tabURL
-					if u is not missing value and u is not "" and u is not "about:blank" and u does not start with "favorites:" then set end of urls to u
-				end repeat
-				if urls is not {} then set end of windowURLs to urls
-			end try
-		end repeat
-	end tell
+	if application "Safari" is running then
+		tell application "Safari"
+			repeat with w in windows
+				try
+					set urls to {}
+					set tabURLs to URL of every tab of w
+					repeat with tabURL in tabURLs
+						set u to contents of tabURL
+						if u is not missing value and u is not "" and u is not "about:blank" and u does not start with "favorites:" then set end of urls to u
+					end repeat
+					if urls is not {} then set end of windowURLs to urls
+				end try
+			end repeat
+		end tell
+	end if
 
-	if windowURLs is {} then
+	if windowURLs is {} and filePaths is {} then
 		display alert "Nothing to save" message "Safari has no open tabs with web pages." as warning
 		return input
 	end if
 
 	-- Offer all windows when more than one is open
-	set chosenWindows to {item 1 of windowURLs}
+	set chosenWindows to windowURLs
 	if (count of windowURLs) &gt; 1 then
 		set totalTabs to 0
 		repeat with urls in windowURLs
@@ -92,14 +102,25 @@
 		set frontLabel to "Front Window (" &amp; (count of item 1 of windowURLs) &amp; ")"
 		set allLabel to "All " &amp; (count of windowURLs) &amp; " Windows (" &amp; totalTabs &amp; ")"
 		set scopeChoice to button returned of (display dialog "Save which tabs?" buttons {"Cancel", allLabel, frontLabel} default button frontLabel cancel button "Cancel" with title "Save Session")
-		if scopeChoice is allLabel then set chosenWindows to windowURLs
+		if scopeChoice is frontLabel then set chosenWindows to {item 1 of windowURLs}
 	end if
 
 	-- Ask for a name; replace characters that can't go in a filename
+	set fileName to ""
 	repeat
-		set fileName to text returned of (display dialog "Session name:" default answer "" buttons {"Cancel", "Save"} default button "Save" cancel button "Cancel" with title "Save Session")
-		set fileName to my replaceText(my replaceText(fileName, "/", "-"), ":", "-")
-		if fileName is not "" then exit repeat
+		set namePrompt to "Session name:"
+		if filePaths is not {} then set namePrompt to namePrompt &amp; return &amp; return &amp; "Files to reopen: " &amp; (count of filePaths)
+		set r to display dialog namePrompt default answer fileName buttons {"Cancel", "Add Files…", "Save"} default button "Save" cancel button "Cancel" with title "Save Session"
+		set fileName to my replaceText(my replaceText(text returned of r, "/", "-"), ":", "-")
+		if button returned of r is "Add Files…" then
+			try
+				repeat with f in (choose file with prompt "Files to reopen with this session:" with multiple selections allowed)
+					set end of filePaths to POSIX path of f
+				end repeat
+			end try
+		else if fileName is not "" then
+			exit repeat
+		end if
 	end repeat
 	set filePath to folderPath &amp; fileName &amp; ".txt"
 
@@ -118,6 +139,12 @@
 			set tabCount to tabCount + 1
 		end repeat
 	end repeat
+	if filePaths is not {} then
+		if urlsText is not "" then set urlsText to urlsText &amp; linefeed
+		repeat with p in filePaths
+			set urlsText to urlsText &amp; p &amp; linefeed
+		end repeat
+	end if
 
 	set fh to open for access (POSIX file filePath) with write permission
 	try
@@ -130,7 +157,9 @@
 		return input
 	end try
 
-	display notification "Saved " &amp; tabCount &amp; " tabs" with title "Session \"" &amp; fileName &amp; "\" saved"
+	set summary to "Saved " &amp; tabCount &amp; " tabs"
+	if filePaths is not {} then set summary to summary &amp; " and " &amp; (count of filePaths) &amp; " files"
+	display notification summary with title "Session \"" &amp; fileName &amp; "\" saved"
 	return input
 end run
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env zsh
-# Open a saved session in Safari (same format as ~/dotfiles/apps/load_session.app).
+# Open a saved session full screen: tabs in Safari, files in their default app (same format as ~/dotfiles/apps/load_session.app).
 #   load_session               pick with fzf (Tab to pick several)
 #   load_session name...       open by name; a partial name opens fzf pre-filtered
 #   load_session -l            list sessions, newest first
 #   load_session -e name       edit in $EDITOR
 #   load_session -d name...    delete
 set -euo pipefail
+setopt extended_glob
 
 dir=${SESSIONS_DIR:-$HOME/Desktop/sessions}
 sessions() { [[ -d $dir ]] && command ls -t $dir | sed -n 's/\.txt$//p' }
@@ -17,6 +18,27 @@ case ${1:-} in
   -e) exec ${EDITOR:-vi} $dir/${2:?name required}.txt ;;
   -d) shift; for n in "$@"; do rm -v $dir/$n.txt; done; exit ;;
 esac
+
+# Make the just-opened file's window full screen: waits for a frontmost window named after it
+fullscreen() {
+  osascript - "$1" <<'APPLESCRIPT' || print -u2 "Couldn't make '$1' full screen (your terminal needs Privacy & Security > Accessibility access)"
+on run argv
+	set stem to item 1 of argv
+	tell application "System Events"
+		repeat 50 times
+			set ws to (windows of (first application process whose frontmost is true) whose name contains stem)
+			if ws is not {} then
+				set value of attribute "AXFullScreen" of item 1 of ws to true
+				delay 1
+				return
+			end if
+			delay 0.1
+		end repeat
+	end tell
+	error "No window appeared for " & stem
+end run
+APPLESCRIPT
+}
 
 names=()
 if (( $# == 0 )); then
@@ -30,18 +52,23 @@ else
 fi
 (( $#names )) || { print -u2 "No session chosen."; exit 1 }
 
-# One argv entry per URL, with "" marking the end of each window
-args=()
+# One argv entry per URL, with "" marking the end of each window; lines that are paths are files
+args=() files=() ntabs=0
 for n in $names; do
   while IFS= read -r line || [[ -n $line ]]; do
     line=${${line##[[:space:]]#}%%[[:space:]]#}
     [[ $line == \#* ]] && continue
+    if [[ $line == (/|\~/)* ]]; then
+      files+=${line/#\~\//$HOME/}
+      continue
+    fi
+    [[ -n $line ]] && (( ++ntabs ))
     args+=("$line")
   done < $dir/$n.txt
   args+=('')
 done
 
-osascript - "${args[@]}" <<'APPLESCRIPT'
+(( ntabs )) && osascript - "${args[@]}" <<'APPLESCRIPT'
 on run argv
 	tell application "Safari"
 		set urls to {}
@@ -55,11 +82,40 @@ on run argv
 				repeat with i from 2 to count of urls
 					tell w to make new tab at end of tabs with properties {URL:item i of urls}
 				end repeat
+				my fullScreen()
 				set urls to {}
 			end if
 		end repeat
 		activate
 	end tell
 end run
+
+-- Makes the Safari window just opened full screen. Goes through the View menu because
+-- System Events can't see windows that are on another Space.
+on fullScreen()
+	try
+		tell application "Safari" to activate
+		tell application "System Events" to tell menu "View" of menu bar 1 of process "Safari"
+			repeat 30 times
+				if exists menu item "Enter Full Screen" then
+					click menu item "Enter Full Screen"
+					exit repeat
+				end if
+				delay 0.1
+			end repeat
+			-- Wait for the animation to finish before anything else opens
+			repeat 50 times
+				if exists menu item "Exit Full Screen" then exit repeat
+				delay 0.1
+			end repeat
+		end tell
+		delay 0.5
+	on error errMsg
+		log "Couldn't make Safari full screen: " & errMsg
+	end try
+end fullScreen
 APPLESCRIPT
+for f in $files; do
+  if [[ -e $f ]]; then open $f && fullscreen ${f:t:r}; else print -u2 "Missing file: $f"; fi
+done
 print "Opened ${(j:, :)names}"

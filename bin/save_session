@@ -1,13 +1,27 @@
 #!/usr/bin/env zsh
 # Save Safari tabs as a named session (same format as ~/dotfiles/apps/save_session.app).
-#   save_session [name]      front window
-#   save_session -a [name]   all windows (restored as separate windows)
+#   save_session [name]              front window
+#   save_session -a [name]           all windows (restored as separate windows)
+#   save_session [-a] files [name]   also save files (a.pdf,~/b.pdf) to reopen with the tabs
 set -euo pipefail
+setopt extended_glob
 
 dir=${SESSIONS_DIR:-$HOME/Desktop/sessions}
 scope=front
 [[ ${1:-} == -a ]] && { scope=all; shift }
-[[ ${1:-} == -h || ${1:-} == --help ]] && { sed -n '2,4s/^# \{0,1\}//p' $0; exit }
+[[ ${1:-} == -h || ${1:-} == --help ]] && { sed -n '2,5s/^# \{0,1\}//p' $0; exit }
+
+# A first argument that looks like paths (has a / or , or names a file) is the comma-separated file list
+files=()
+if [[ -n ${1:-} && ( $1 == *[/,]* || -e $1 ) ]]; then
+  for f in ${(s:,:)1}; do
+    f=${${f##[[:space:]]#}%%[[:space:]]#}
+    f=${f/#\~\//$HOME/}
+    [[ -e $f ]] || { print -u2 "No such file: $f"; exit 1 }
+    files+=${f:a}
+  done
+  shift
+fi
 
 urls=$(osascript - $scope <<'APPLESCRIPT'
 on run argv
@@ -37,8 +51,8 @@ on run argv
 	return out
 end run
 APPLESCRIPT
-)
-[[ -n $urls ]] || { print -u2 "No tabs to save."; exit 1 }
+) || (( $#files )) || exit 1
+[[ -n $urls ]] || (( $#files )) || { print -u2 "No tabs to save."; exit 1 }
 
 name=${1:-}
 [[ -n $name ]] || read -r "name?Session name: "
@@ -51,5 +65,11 @@ if [[ -e $file ]]; then
   read -q "?'$name' exists. Replace? [y/N] " || { print; exit 1 }
   print
 fi
-print -r -- $urls > $file
-print "Saved $(grep -c . $file) tabs to '$name'"
+# Files go last, as absolute paths in their own block
+{
+  if [[ -n $urls ]]; then print -r -- $urls; fi
+  if [[ -n $urls ]] && (( $#files )); then print; fi
+  if (( $#files )); then print -rl -- $files; fi
+} > $file
+tabs=(${(f)urls})
+print "Saved $#tabs tabs${files:+ and $#files files} to '$name'"

@@ -51,8 +51,11 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>source</key>
-					<string>on run {input, parameters}
-	-- Sessions are plain text: one URL per line, a blank line between windows, # for comments
+					<string>global fullScreenFailed
+
+on run {input, parameters}
+	-- Sessions are plain text: one URL per line, a blank line between windows, # for comments;
+	-- lines that are paths (/… or ~/…) are files, opened full screen in their default app
 	set folderPath to (POSIX path of (path to home folder)) &amp; "Desktop/sessions/"
 
 	-- Session names, most recently saved first
@@ -83,6 +86,8 @@
 	end if
 
 	set tabCount to 0
+	set filePaths to {}
+	set fullScreenFailed to false
 	repeat with sessionName in chosenSessions
 		set filePath to folderPath &amp; sessionName &amp; ".txt"
 		try
@@ -102,17 +107,37 @@
 					set tabCount to tabCount + (count of urls)
 					set urls to {}
 				end if
+			else if l starts with "/" or l starts with "~/" then
+				set end of filePaths to l
 			else if l does not start with "#" then
 				set end of urls to l
 			end if
 		end repeat
 	end repeat
 
+	set missingFiles to ""
+	repeat with p in filePaths
+		set p to contents of p
+		if p starts with "~/" then set p to (POSIX path of (path to home folder)) &amp; text 3 thru -1 of p
+		try
+			do shell script "open " &amp; quoted form of p
+			try
+				my fullScreen(do shell script "f=" &amp; quoted form of p &amp; "; f=${f##*/}; printf %s \"${f%.*}\"")
+			on error
+				set fullScreenFailed to true
+			end try
+		on error
+			set missingFiles to missingFiles &amp; p &amp; linefeed
+		end try
+	end repeat
+	if missingFiles is not "" then display alert "Couldn't open some files" message missingFiles as warning
+	if fullScreenFailed then display alert "Couldn't make some windows full screen" message "Allow load_session under System Settings &gt; Privacy &amp; Security &gt; Accessibility." as warning
+
 	tell application "Safari" to activate
 	return input
 end run
 
--- Opens urls as tabs in a new Safari window (or in reuseWindow); always returns missing value
+-- Opens urls as tabs in a new full-screen Safari window (or in reuseWindow); always returns missing value
 on openWindow(urls, reuseWindow)
 	tell application "Safari"
 		if reuseWindow is missing value then
@@ -126,8 +151,45 @@ on openWindow(urls, reuseWindow)
 			tell w to make new tab at end of tabs with properties {URL:item i of urls}
 		end repeat
 	end tell
+	-- Full screen via the View menu: System Events can't see windows that are on another Space
+	try
+		tell application "Safari" to activate
+		tell application "System Events" to tell menu "View" of menu bar 1 of process "Safari"
+			repeat 30 times
+				if exists menu item "Enter Full Screen" then
+					click menu item "Enter Full Screen"
+					exit repeat
+				end if
+				delay 0.1
+			end repeat
+			-- Wait for the animation to finish before anything else opens
+			repeat 50 times
+				if exists menu item "Exit Full Screen" then exit repeat
+				delay 0.1
+			end repeat
+		end tell
+		delay 0.5
+	on error
+		set fullScreenFailed to true
+	end try
 	return missing value
 end openWindow
+
+-- Makes the just-opened file's window full screen: waits for a frontmost window named after it
+on fullScreen(stem)
+	tell application "System Events"
+		repeat 50 times
+			set ws to (windows of (first application process whose frontmost is true) whose name contains stem)
+			if ws is not {} then
+				set value of attribute "AXFullScreen" of item 1 of ws to true
+				delay 1
+				return
+			end if
+			delay 0.1
+		end repeat
+	end tell
+	error "No window appeared for " &amp; stem
+end fullScreen
 
 on trim(t)
 	set ws to {space, tab, return, linefeed}
