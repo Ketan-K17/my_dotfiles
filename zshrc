@@ -45,3 +45,8 @@ source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 eval "$(clii shell-init)"
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/ketankunkalikar/.lmstudio/bin"
+# End of LM Studio CLI section
+
