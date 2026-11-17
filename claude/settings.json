@@ -1,0 +1,28 @@
+{
+  "model": "haiku",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.sh permission"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.sh done"
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "light",
+  "agentPushNotifEnabled": true
+}
