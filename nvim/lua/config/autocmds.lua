@@ -15,3 +15,12 @@ if arg ~= "" and vim.fn.isdirectory(arg) == 1 then
     require("mini.files").open(arg, false)
   end)
 end
+
+-- No completion popups while writing prose (blink.cmp honors vim.b.completion).
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("prose_no_completion", { clear = true }),
+  pattern = { "text", "markdown" },
+  callback = function(ev)
+    vim.b[ev.buf].completion = false
+  end,
+})
