@@ -24,3 +24,13 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.b[ev.buf].completion = false
   end,
 })
+
+-- Same for scratch buffers with no filetype (plain `nvim`); FileType never fires for those.
+vim.api.nvim_create_autocmd("InsertEnter", {
+  group = "prose_no_completion",
+  callback = function(ev)
+    if vim.bo[ev.buf].filetype == "" then
+      vim.b[ev.buf].completion = false
+    end
+  end,
+})
