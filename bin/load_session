@@ -70,6 +70,8 @@ done
 
 (( ntabs )) && osascript - "${args[@]}" <<'APPLESCRIPT'
 on run argv
+	set launchedSafari to application "Safari" is not running
+	set ourWindowIDs to {}
 	tell application "Safari"
 		set urls to {}
 		repeat with arg in (argv & {""})
@@ -77,18 +79,56 @@ on run argv
 			if u is not "" then
 				set end of urls to u
 			else if urls is not {} then
+				-- The new window isn't reliably front window (e.g. while Safari is still launching), so find it by id
+				set oldIDs to id of every window
 				make new document with properties {URL:item 1 of urls}
-				set w to front window
+				set w to missing value
+				repeat 50 times
+					repeat with cand in windows
+						if (id of cand) is not in oldIDs then set w to contents of cand
+					end repeat
+					if w is not missing value then exit repeat
+					delay 0.1
+				end repeat
+				if w is missing value then set w to front window
 				repeat with i from 2 to count of urls
 					tell w to make new tab at end of tabs with properties {URL:item i of urls}
 				end repeat
+				-- The View menu acts on the frontmost window
+				set index of w to 1
+				set end of ourWindowIDs to id of w
 				my fullScreen()
 				set urls to {}
 			end if
 		end repeat
-		activate
 	end tell
+	-- Launching Safari opens its own Start Page window alongside ours
+	if launchedSafari then my closeStartWindows(ourWindowIDs)
+	tell application "Safari" to activate
 end run
+
+-- Closes Safari windows not in keepIDs that only hold a blank or Start Page tab
+on closeStartWindows(keepIDs)
+	tell application "Safari"
+		-- Fetch the ids first: looping over "id of every window" directly yields references Safari can't resolve
+		set winIDs to id of every window
+		repeat with wid in winIDs
+			set wid to contents of wid
+			try
+				set w to window id wid
+				-- A window on another Space (ours are full screen) reports no tabs, but its name still reads
+				if wid is not in keepIDs then
+					if name of w is "Start Page" then
+						close w
+					else if (count of tabs of w) is 1 then
+						set u to URL of current tab of w
+						if u is missing value or u is "" or u is "about:blank" or u starts with "favorites:" then close w
+					end if
+				end if
+			end try
+		end repeat
+	end tell
+end closeStartWindows
 
 -- Makes the Safari window just opened full screen. Goes through the View menu because
 -- System Events can't see windows that are on another Space.

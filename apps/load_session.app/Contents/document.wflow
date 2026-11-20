@@ -51,7 +51,7 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>source</key>
-					<string>global fullScreenFailed
+					<string>global fullScreenFailed, ourWindowIDs
 
 on run {input, parameters}
 	-- Sessions are plain text: one URL per line, a blank line between windows, # for comments;
@@ -71,7 +71,10 @@ on run {input, parameters}
 
 	-- If launching Safari creates a blank window, reuse it for the first window we open
 	set blankWindow to missing value
+	set launchedSafari to false
+	set ourWindowIDs to {}
 	if application "Safari" is not running then
+		set launchedSafari to true
 		tell application "Safari" to activate
 		repeat 30 times
 			tell application "Safari" to if (count of windows) &gt; 0 then exit repeat
@@ -80,7 +83,7 @@ on run {input, parameters}
 		tell application "Safari"
 			if (count of windows) is 1 and (count of tabs of window 1) is 1 then
 				set u to URL of current tab of window 1
-				if u is missing value or u is "" or u is "about:blank" or u starts with "favorites:" then set blankWindow to window 1
+				if u is missing value or u is "" or u is "about:blank" or u starts with "favorites:" then set blankWindow to window id (id of window 1)
 			end if
 		end tell
 	end if
@@ -133,16 +136,51 @@ on run {input, parameters}
 	if missingFiles is not "" then display alert "Couldn't open some files" message missingFiles as warning
 	if fullScreenFailed then display alert "Couldn't make some windows full screen" message "Allow load_session under System Settings &gt; Privacy &amp; Security &gt; Accessibility." as warning
 
+	-- Safari's own launch window can show up too late to be reused above
+	if launchedSafari then my closeStartWindows(ourWindowIDs)
 	tell application "Safari" to activate
 	return input
 end run
+
+-- Closes Safari windows not in keepIDs that only hold a blank or Start Page tab
+on closeStartWindows(keepIDs)
+	tell application "Safari"
+		-- Fetch the ids first: looping over "id of every window" directly yields references Safari can't resolve
+		set winIDs to id of every window
+		repeat with wid in winIDs
+			set wid to contents of wid
+			try
+				set w to window id wid
+				-- A window on another Space (ours are full screen) reports no tabs, but its name still reads
+				if wid is not in keepIDs then
+					if name of w is "Start Page" then
+						close w
+					else if (count of tabs of w) is 1 then
+						set u to URL of current tab of w
+						if u is missing value or u is "" or u is "about:blank" or u starts with "favorites:" then close w
+					end if
+				end if
+			end try
+		end repeat
+	end tell
+end closeStartWindows
 
 -- Opens urls as tabs in a new full-screen Safari window (or in reuseWindow); always returns missing value
 on openWindow(urls, reuseWindow)
 	tell application "Safari"
 		if reuseWindow is missing value then
+			-- The new window isn't reliably front window (e.g. while Safari is still launching), so find it by id
+			set oldIDs to id of every window
 			make new document with properties {URL:item 1 of urls}
-			set w to front window
+			set w to missing value
+			repeat 50 times
+				repeat with cand in windows
+					if (id of cand) is not in oldIDs then set w to contents of cand
+				end repeat
+				if w is not missing value then exit repeat
+				delay 0.1
+			end repeat
+			if w is missing value then set w to front window
 		else
 			set w to reuseWindow
 			set URL of current tab of w to item 1 of urls
@@ -150,6 +188,9 @@ on openWindow(urls, reuseWindow)
 		repeat with i from 2 to count of urls
 			tell w to make new tab at end of tabs with properties {URL:item i of urls}
 		end repeat
+		-- The View menu acts on the frontmost window
+		set index of w to 1
+		set end of ourWindowIDs to id of w
 	end tell
 	-- Full screen via the View menu: System Events can't see windows that are on another Space
 	try
